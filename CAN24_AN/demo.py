@@ -1,7 +1,11 @@
 from __future__ import division
 import os,time,cv2
-import tensorflow as tf
-import tensorflow.contrib.slim as slim
+
+import tensorflow.compat.v1 as tf
+tf.disable_v2_behavior()
+
+import tf_slim as slim
+
 import numpy as np
 
 def lrelu(x):
@@ -53,11 +57,9 @@ def prepare_data(task):
             val_names.append("../data/%s/%06d.png"%(dirname,i))#test input image at 1080p
     return input_names,output_names,val_names,finetune_input_names,finetune_output_names
 
-os.system('nvidia-smi -q -d Memory |grep -A4 GPU|grep Free >tmp')
-os.environ['CUDA_VISIBLE_DEVICES']=str(np.argmax([int(x.split()[2]) for x in open('tmp','r').readlines()]))
-os.system('rm tmp')
 
 task="L0_smoothing"
+
 is_training=False
 sess=tf.Session()
 
@@ -73,6 +75,7 @@ saver=tf.train.Saver(max_to_keep=1000)
 sess.run(tf.global_variables_initializer())
 
 ckpt=tf.train.get_checkpoint_state(task)
+
 if ckpt:
     print('loaded '+ckpt.model_checkpoint_path)
     saver.restore(sess,ckpt.model_checkpoint_path)
@@ -114,15 +117,20 @@ if is_training:
             output_image=np.minimum(np.maximum(output_image,0.0),1.0)*255.0
             cv2.imwrite("%s/%04d/%06d.jpg"%(task,epoch,ind+1),np.uint8(output_image[0,:,:,:]))
 
-if not os.path.isdir("%s/MIT-Adobe_test_1080p_result"%task):
-    os.makedirs("%s/MIT-Adobe_test_1080p_result"%task)
+print("starting task:" + task)
+
+outpath = os.path.join(task, "MIT-Adobe_test_1080p_result")
+if not os.path.isdir(outpath):
+    os.makedirs(outpath)
+
 for ind in range(len(val_names)):
     if not os.path.isfile(val_names[ind]):
         continue
+
     input_image=np.expand_dims(np.float32(cv2.imread(val_names[ind],-1)),axis=0)/255.0
     st=time.time()
     output_image=sess.run(network,feed_dict={input:input_image})
     print("%.3f"%(time.time()-st))
     output_image=np.minimum(np.maximum(output_image,0.0),1.0)*255.0
-    cv2.imwrite("%s/MIT-Adobe_test_1080p_result/%06d.png"%(task,ind+1),np.uint8(output_image[0,:,:,:]))
+    cv2.imwrite(os.path.join(outpath,"%06d.png"%(ind+1)),np.uint8(output_image[0,:,:,:]))
 
